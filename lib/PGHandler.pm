@@ -2,12 +2,9 @@
 
 PGHandler - Accessors for PostgreSQL data
 
-=over
-
 =head1 DESCRIPTION
 
- Accessors for PostgreSQL data.  Simplifies data access through a series
- of standard class methods.
+Accessors for PostgreSQL data.  Simplifies data access through a series of standard class methods.
 
 =head1 SYNOPSIS
 
@@ -15,14 +12,14 @@ PGHandler - Accessors for PostgreSQL data
  #
  use PGHandler;
  my $DB = PGHandler->new(dbname=>'products',dbuser=>'postgres',dbpass=>'pgpassword');
-
+ 
  # Retrieve Data & List Records
  #
  $DB->PrepLEX('SELECT * FROM products');
  while ($item=$DB->GetRecord()) {
- 	print $item->{PROD_ID}\t$item->{PROD_TITLE}\t$item->{PROD_QTY}\n";
+     print "$item->{PROD_ID}\t$item->{PROD_TITLE}\t$item->{PROD_QTY}\n";
  }
-
+ 
  # Add / Update Record based on CGI Form
  # assuming objCGI is an instatiated CGI object
  # if the CGI param 'prod_id' is set we update
@@ -33,7 +30,7 @@ PGHandler - Accessors for PostgreSQL data
  $DB->AddUpdate( CGI=>$objCGI     , CGIKEY=>'prod_id', 
                  TABLE=>'products', DBKEY=>'prod_id',
                  hrCGIMAP=>\%cgimap
-               );
+                );
 
 =head1 REQUIRES
 
@@ -44,14 +41,9 @@ PGHandler - Accessors for PostgreSQL data
 
 =head1 EXPORT
 
- None by default.
+None by default.
 
-=head1 INSTALLATION
-
- perl Makefile.PL
- make
- make test
- make install
+=over
 
 =cut
 #==============================================================================
@@ -101,7 +93,7 @@ use DBI;
 =cut
 #==============================================================================
 
-our $VERSION 				= 0.7;
+our $VERSION 				= 0.8;							# Set our version
 
 struct (
 		dbname	=> '$',
@@ -199,6 +191,7 @@ struct (
 =back
 
 =cut
+#----------------------------
 sub AddUpdate() {
 	my $self = shift;
 	my %options = @_;
@@ -337,6 +330,7 @@ sub AddUpdate() {
 =back
 
 =cut
+#----------------------------
 sub DoLE {
 	my $self			= shift;
 	my $cmdstr 		= shift;
@@ -452,6 +446,7 @@ sub nsth {
 =back
 
 =cut
+#----------------------------------------------------------
 sub Field {
 	my $self 	= shift;
 
@@ -523,6 +518,7 @@ sub Field {
 =back
 
 =cut
+#----------------------------
 sub GetRecord {
 	my ($self, @p)	= @_;
 	my ($name,$rtype) = rearrange([NAME,RTYPE],@p);
@@ -535,12 +531,12 @@ sub GetRecord {
 	my $sth = ($name ? $self->nsth($name) : $self->sth);
 	$self->data(ERRMSG,'');
 
-	if 	($rtype eq 'HASHREF') {	
+	if ($rtype eq 'HASHREF') {	
 		$retval  = $sth->fetchrow_hashref('NAME_uc')	or $err = "GetRecord() $DBI::errstr"; 
-		if (!$err) { return $retval; }
+		if (!$DBI::errstr) { return $retval; }
 	} elsif ($rtype eq 'ARRAY'  ) { 
 		@retarry = $sth->fetchrow_array()				or $err = "GetRecord() $DBI::errstr"; 
-		if (!$err) { return @retarry; }
+		if (!$DBI::errstr) { return @retarry; }
 	}
 
 	# Error Handling
@@ -550,7 +546,7 @@ sub GetRecord {
 		carp($err);	
 	}
 
-	return 0;
+	return undef;
 }
 
 
@@ -577,6 +573,7 @@ sub GetRecord {
 =back
 
 =cut
+#----------------------------
 sub PrepLE () {
 	my ($self,@p)	= @_;
 	my ($cmdstr, $execit, $dienow, $param, $name) = rearrange([CMD,EXEC,DIE,PARAM,NAME],@p);
@@ -638,6 +635,7 @@ sub PrepLE () {
 =back
 
 =cut
+#----------------------------
 sub PrepLEX() { 
 	my ($self,@p)	= @_;
 	my ($cmdstr, $dienow, $param, $name) = rearrange([CMD,DIE,PARAM,NAME],@p);
@@ -646,6 +644,7 @@ sub PrepLEX() {
 }
 
 #--------------------------------------------------------------------
+
 =item Quote()
 
  Quote a parameter for SQL processing via
@@ -654,6 +653,7 @@ sub PrepLEX() {
  Sets the data handle if necessary.
 
 =cut
+#----------------------------
 sub Quote() {
 	my $self = shift;
 	if (!$self->dbh()) 	{	$self->SetDH(); }
@@ -670,8 +670,7 @@ sub Quote() {
 =cut
 #==============================================================================
 
-
-#--------------------------------------------------------------------
+#========================
 
 =item SetDH()
 
@@ -683,6 +682,7 @@ sub Quote() {
  overrides SetDH with DB specific connection info.
 
 =cut
+#----------------------------
 sub SetDH() {
 	my $self = shift;
 
@@ -736,9 +736,12 @@ sub SetDH() {
 	print $options{PARM3};
  }
 
+
+
 =back
 
 =cut
+#----------------------------------------------------------
 sub SetMethodParms(@) {
 	my ($class, $hr, $order, $self, @p) = @_;
 
@@ -779,6 +782,7 @@ sub SetMethodParms(@) {
 =back
 
 =cut
+#----------------------------------------------------------
 sub CGIMap(@) {
 	my ($self, %options) = @_;
 	foreach ($options{CGI}->param()) {	
@@ -894,13 +898,16 @@ __END__
 
 =head1 REVISION HISTORY
 
-v0.7 - Apr 25 2005
+ v0.8 - Apr 26 2005
+      Fixed GetRecord() (again) - needed to check $DBI::errstr not $err
+
+ v0.7 - Apr 25 2005
       Added error check on ->Field to ensure hashref returned from getrecord
       Added CGIMAP method
       Invoke CGIMAP from within AddUpdate if missing map
       Fixed GetRecord Return system
 
-v0.5 - Apr/2005
+ v0.5 - Apr/2005
       Added DBI error trap on DoLE function
       Added named statement handles for multiple/nested PrepLE(X) capability
       Added VERBOSE mode to AddUpdate
@@ -908,7 +915,7 @@ v0.5 - Apr/2005
       Updated FIELD to use named statement handles 
 
  v0.4 - Apr/2005
-      Fixed some stuff
+ 		Fixed some stuff
 
  v0.3 - Apr/2005
       Added REQUIRED optional parameter to AddUpdate
