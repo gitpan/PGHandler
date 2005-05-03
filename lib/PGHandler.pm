@@ -1,6 +1,6 @@
 =head1 NAME
 
-PGHandler - Accessors for PostgreSQL data
+PGHandler - Accessors for PostgreSQL data (0.9)
 
 =head1 DESCRIPTION
 
@@ -43,8 +43,6 @@ Accessors for PostgreSQL data.  Simplifies data access through a series of stand
 
 None by default.
 
-=over
-
 =cut
 #==============================================================================
 
@@ -66,11 +64,11 @@ use DBI;
 
 =head1 PUBLIC METHODS
 
-=item new()
-
-=over
+=head2 new()
 
  Create a new PGHandler object.
+
+=over
 
 =item Parameters
 
@@ -80,20 +78,21 @@ use DBI;
 
  dbpass => password for that user
 
-=item dbh()
+=back
+
+=head2 dbh()
 
  Returns the database handle for the DB connection.
 
-=item sth()
+=head2 sth()
 
  Returns the statement handle for the active record selection.
-
-=back
  
 =cut
 #==============================================================================
 
-our $VERSION 				= 0.8;							# Set our version
+our $VERSION 				= 0.9;							# Set our version
+our $BUILD					= '2005-02-27 16:05';		# BUILD
 
 struct (
 		dbname	=> '$',
@@ -107,7 +106,7 @@ struct (
 
 #--------------------------------------------------------------------
 
-=item AddUpdate()
+=head2 AddUpdate()
 
  Adds a new record or updates an existing record in the database
  depending on whether or not a specific CGI parameter has been set.
@@ -140,18 +139,27 @@ struct (
 =item Parameters (Required)
 
  CGI       => a CGI object from the CGI:: module
- CGIKEY    => the CGI parameter name that stores the data key 
+
  DBKEY     => the name of the key field within the table
               defaults to PGHandler Object Property <table>!PGHkeyfld
-				  must be provided or the <table>!PGHkeyfld option must have
-				  been setup when creating a new PGHandler object
+              must be provided 
+				  - or -
+			     the <table>!PGHkeyfld option must have
+              been setup when creating a new PGHandler object
+
  TABLE     => the name of the table to play with
+
+ CGISTART or hrCGIMAP must be set (see below)
 
 =item Parameters (Optional)
 
  CGISTART  => map all CGI object fields starting with this string
               into equivalently named database fields
 				  only used when hrCGIMAP is not set
+
+ CGIKEY    => the CGI parameter name that stores the data key
+              defaults to DBKEY
+
 
  CHECKKEY  => set to 1 to perform ADD if the DBKEY is not found in the
               database.
@@ -173,6 +181,10 @@ struct (
 
  VERBOSE   => set to 1 to set lastinfo() = full command string
               otherwise returns 'INSERT' or 'UPDATE' on succesful execution
+
+ BOOLEANS  => array reference pointing to the array that holds the list
+              of database field booleans that we want to force to false
+				  if not set by the equivalently named CGI field
 
 =item Action
 
@@ -214,9 +226,10 @@ sub AddUpdate() {
 
 	# Set Defaults
 	#
-	$options{DBKEY} 	= $options{DBKEY} 	|| $self->data("$options{TABLE}!PGHkeyfld");
-	$options{DBSTAMP} = $options{DBSTAMP}  || $self->data("$options{TABLE}!PGHtimestamp");
-	$options{MD5} 		= $options{MD5}  		|| $self->data("$options{TABLE}!PGHmd5");
+	$options{DBKEY} 	||= $self->data("$options{TABLE}!PGHkeyfld");
+	$options{DBSTAMP} ||= $self->data("$options{TABLE}!PGHtimestamp");
+	$options{MD5} 		||= $self->data("$options{TABLE}!PGHmd5");
+	$options{CGIKEY}  ||= $options{DBKEY};
 
 	if (!$options{DONTSTAMP} && $options{DBSTAMP}) 	{  $options{hrCGIMAP}->{$options{DBSTAMP}} = $options{DBSTAMP}; }
 
@@ -226,7 +239,7 @@ sub AddUpdate() {
 
 	# Check Mandatory Parameters
 	#
-	foreach (CGI, CGIKEY, TABLE, DBKEY) { 
+	foreach (CGI, TABLE, DBKEY) { 
 		if (!defined $options{$_}) { 
 			$self->data(ERRMSG,"PGH AddUpdate - parameter $_ is required for table $options{TABLE}.");			
 			return; 
@@ -314,7 +327,7 @@ sub AddUpdate() {
 
 #--------------------------------------------------------------------
 
-=item DoLE()
+=head2 DoLE()
 
  Do DBH Command and log any errors to the log file.
 	[0] = SQL command
@@ -354,64 +367,10 @@ sub DoLE {
 	return $retval;
 }
 
-#--------------------------------------------------------------------
-
-=item lasterror()
-
- Retrieve the latest error produced by a PGHandler object.
-
-=over
-
-=item Returns
-
- The error message
-
-=back
-
-=cut
-sub lasterror {	return shift->data(ERRMSG);	}
 
 #--------------------------------------------------------------------
 
-=item lastinfo()
-
- Retrieve the latest info message produced by a PGHandler object.
-
-=over
-
-=item  Returns
-
- The info message
-
-=back
-
-=cut
-sub lastinfo {	return shift->data(INFOMSG);	}
-
-#--------------------------------------------------------------------
-
-=item nsth()
-
- Retrieve a named statement handle
-
-=over
-
-=item  Returns
-
- The handle, as requested.
-
-=back
-
-=cut
-sub nsth {	
-	my ($self,$name) = @_;
-	return $self->data("$name!sth");	
-}
-
-
-#--------------------------------------------------------------------
-
-=item Field()
+=head2 Field()
 
  Retreive a field from the specified table.
 
@@ -449,19 +408,25 @@ sub nsth {
 #----------------------------------------------------------
 sub Field {
 	my $self 	= shift;
-
 	my %options	= @_;
 	my ($table, $field) = split(/\!/,$options{DATA});
 	my $keyfld;
 	my $retval;
 
+	# Table And Field Set
+	#
 	if ($table && $field) {
+
+		# Data Not Set 
+		# Or set with outdated key
+		# Reload
+		#
 		if (!$self->data($options{DATA}) || ($options{KEY} != $self->data("$table!key"))) {
 
 			# Key & Where Not Set - set value to blank
 			#
 			if (($options{KEY} eq '') and ($options{WHERE} eq '')) { 
-				$self->data($tfield, '');
+				$self->data($options{DATA}, '');
 
 			# Key or Where Set - Get Value From DB
 			#
@@ -474,19 +439,22 @@ sub Field {
 					$self->PrepLEX( -cmd => qq[SELECT * FROM $table $where], -name => "$table!PGHfield" );
 					$self->data("$table!PGHfhr", $self->GetRecord("$table!PGHfield"));
 					if ($self->data("$table!PGHfhr")) {
-						$self->data("$table!key", $self->data("$table!PGHfhr")->{$self->data("$table!PGHkeyfld")});
+						my $keyfld = uc($self->data("$table!PGHkeyfld"));
+						$self->data("$table!key", $self->data("$table!PGHfhr")->{$keyfld});
 					}
 				}
 		
 				# Load The Field
 				#
-				$self->data($tfield, $self->data("$table!PGHfhr")->{uc($field)});
+				my $data = ($self->data("$table!PGHfhr") ? $self->data("$table!PGHfhr")->{uc($field)} : '');
+				$self->data($options{DATA}, $data);
 			}
 
-			$retval = $self->data($tfield);
 		}
+		$retval = $self->data($options{DATA});
+
 	} else {
-		carp("Table and field must be passed to PGHandler->Field() got $tfield = '$table' '$field'");
+		carp("Table and field must be passed to PGHandler->Field() got $options{DATA} = '$table' '$field'");
 	}
 
 	return $retval;
@@ -496,7 +464,7 @@ sub Field {
 
 #--------------------------------------------------------------------
 
-=item GetRecord()
+=head2 GetRecord()
 
  Retrieves the record in a hash reference with uppercase field names.
  Calls fetchrow_hashref('NAME_uc') from the specified SQL statement.
@@ -529,30 +497,89 @@ sub GetRecord {
 	$rtype = $rtype || 'HASHREF';
 
 	my $sth = ($name ? $self->nsth($name) : $self->sth);
-	$self->data(ERRMSG,'');
 
-	if ($rtype eq 'HASHREF') {	
-		$retval  = $sth->fetchrow_hashref('NAME_uc')	or $err = "GetRecord() $DBI::errstr"; 
-		if (!$DBI::errstr) { return $retval; }
-	} elsif ($rtype eq 'ARRAY'  ) { 
-		@retarry = $sth->fetchrow_array()				or $err = "GetRecord() $DBI::errstr"; 
-		if (!$DBI::errstr) { return @retarry; }
-	}
-
-	# Error Handling
-	#
-	if ($err || ($DBI::errstr ne '')) {	
-		$self->data(ERRMSG,$err || $DBI::errstr);
-		carp($err);	
+	if ($sth) {
+		$self->data(ERRMSG,'');
+		if ($rtype eq 'HASHREF') {	
+			$retval  = $sth->fetchrow_hashref('NAME_uc')	or $err = "GetRecord() $DBI::errstr"; 
+			if (!$DBI::errstr) { return $retval; }
+		} elsif ($rtype eq 'ARRAY'  ) { 
+			@retarry = $sth->fetchrow_array()				or $err = "GetRecord() $DBI::errstr"; 
+			if (!$DBI::errstr) { return @retarry; }
+		}
+	
+		# Error Handling
+		#
+		if ($err || ($DBI::errstr ne '')) {	
+			$self->data(ERRMSG,$err || $DBI::errstr);
+			carp($err);	
+		}
+	} else {
+		$self->data(ERRMSG,'GetRecord() Statement handle not active.');
 	}
 
 	return undef;
 }
 
+#--------------------------------------------------------------------
+
+=head2 lasterror()
+
+ Retrieve the latest error produced by a PGHandler object.
+
+=over
+
+=item Returns
+
+ The error message
+
+=back
+
+=cut
+sub lasterror {	return shift->data(ERRMSG);	}
 
 #--------------------------------------------------------------------
 
-=item PrepLE()
+=head2 lastinfo()
+
+ Retrieve the latest info message produced by a PGHandler object.
+
+=over
+
+=item  Returns
+
+ The info message
+
+=back
+
+=cut
+sub lastinfo {	return shift->data(INFOMSG);	}
+
+#--------------------------------------------------------------------
+
+=head2 nsth()
+
+ Retrieve a named statement handle
+
+=over
+
+=item  Returns
+
+ The handle, as requested.
+
+=back
+
+=cut
+sub nsth {	
+	my ($self,$name) = @_;
+	return $self->data("$name!sth");	
+}
+
+
+
+#--------------------------------------------------------------------
+
+=head2 PrepLE()
 
  Prepare an SQL statement and returns the statement handle, log errors if any.
 
@@ -615,7 +642,7 @@ sub PrepLE () {
 
 #--------------------------------------------------------------------
 
-=item PrepLEX()
+=head2 PrepLEX()
 
  Same as PrepLE but also executes the SQL statement
 
@@ -645,7 +672,7 @@ sub PrepLEX() {
 
 #--------------------------------------------------------------------
 
-=item Quote()
+=head2 Quote()
 
  Quote a parameter for SQL processing via
  the DBI::quote() function
@@ -670,9 +697,9 @@ sub Quote() {
 =cut
 #==============================================================================
 
-#========================
+#--------------------------------------------------------------------
 
-=item SetDH()
+=head2 SetDH()
 
  Internal function to set data handles
  Returns Data Handle
@@ -682,7 +709,6 @@ sub Quote() {
  overrides SetDH with DB specific connection info.
 
 =cut
-#----------------------------
 sub SetDH() {
 	my $self = shift;
 
@@ -702,7 +728,7 @@ sub SetDH() {
 
 #--------------------------------------------------------------------
 
-=item SetMethodParms()
+=head2 SetMethodParms()
 
  Allows for either ordered or positional parameters in
  a method call AND allows the method to be called as EITHER
@@ -712,11 +738,11 @@ sub SetDH() {
 
 =item  Parameters
 
- [0] - the class we are looking to instantiate if necessary
- [1] - reference to hash that will get our named parameters
- [2] - an array of the names of named parameters 
+ [0] - self, the instantiated object
+ [1] - the class we are looking to instantiate if necessary
+ [2] - reference to hash that will get our named parameters
+ [3] - an array of the names of named parameters 
        IN THE ORDER that the positional parameters are expected to appear
- [3] - self, the instantiated object
  [4] - extra parameters, positional or otherwise
 
 =item Action
@@ -730,8 +756,9 @@ sub SetDH() {
 =item Example
 
  sub MyMethod() {
+ 	my $self = shift;
 	my %options;
-	my $self = SetMethodParms('MYCLASS::SUBCLASS', \%options, [PARM1,PARM2,PARM3], @_ );
+		$self = SetMethodParms($self,'MYCLASS::SUBCLASS', \%options, [PARM1,PARM2,PARM3], @_ );
 	print $options{PARM1} if ($options{PARM2} ne '');
 	print $options{PARM3};
  }
@@ -741,9 +768,8 @@ sub SetDH() {
 =back
 
 =cut
-#----------------------------------------------------------
 sub SetMethodParms(@) {
-	my ($class, $hr, $order, $self, @p) = @_;
+	my ($self, $class, $hr, $order, @p) = @_;
 
 	my $sclass	= ref($self) || $self;		# Allows either an object or class name to invoke
 	if ($sclass ne $class) { 
@@ -761,7 +787,7 @@ sub SetMethodParms(@) {
 
 #--------------------------------------------------------------------
 
-=item CGIMap()
+=head2 CGIMap()
 
  Prepare a hash reference for mapping CGI parms to DB fields
  typically used with AddUpdate() from PGHandler.
@@ -770,21 +796,27 @@ sub SetMethodParms(@) {
 
 =item Parameters
 
- [0] - reference to hash that contains the map
- [1] - the CGI object
- [2] - map all fields starting with this text
- [3] - the cgi key field
+ hrCGIMAP 	- reference to hash that contains the map
+ CGI 			- the CGI object
+ CGISTART 	- map all fields starting with this text
+ CGIKEY 		- the cgi key field
+ BOOLEANS 	- address to list of boolean fields
 
 =item Example
 
- $item->CGIMap(CGI => $objCGI, hrCGIMAP=>\%cgimap, CGISTART=>'cont_', CGIKEY=>'cont_id');
+ @boolist = qw(form_field1 form_field2);
+ $item->CGIMap(CGI => $objCGI, hrCGIMAP=>\%cgimap, CGISTART=>'cont_', CGIKEY=>'cont_id', BOOLEANS=>\@boolist);
 
 =back
 
 =cut
-#----------------------------------------------------------
 sub CGIMap(@) {
 	my ($self, %options) = @_;
+
+	# Booleans (not passed if not checked, force them to 0 here)
+	#
+	foreach (@{$options{BOOLEANS}}) { $options{hrCGIMAP}->{$_} = $options{CGI}->param($_); }
+
 	foreach ($options{CGI}->param()) {	
 		if ($_ =~ /^$options{CGISTART}/) { 
 			if (($_ ne $options{CGIKEY}) || ($options{CGI}->param($options{CGIKEY}) ne '')) {
@@ -804,20 +836,20 @@ __END__
 #
 #==============================================================================
 
-=item dbname()
+=head2 dbname()
 
  Get/set database name.
  Simple string name of the database.
 
-=item dbuser()
+=head2 dbuser()
 
  Get/set postgres username.
 
-=item dbpass()
+=head2 dbpass()
 
  Get/set postgres user's password.
 
-=item data()
+=head2 data()
 
  Get/set the data hash - this is where data fields are stored
  for the active record.   
@@ -897,6 +929,13 @@ __END__
 
 
 =head1 REVISION HISTORY
+
+ v0.9 - May 2 2005
+      pod updates
+		AddUpdate() updated, CGIKEY optional - defaults to DBKEY
+		AddUpdate() updated, BOOLEANS feature added
+		GetRecord() updated, added check for sth active before executing
+		Field()	fixed hr cache bug and data bug and trap non-set hr issue
 
  v0.8 - Apr 26 2005
       Fixed GetRecord() (again) - needed to check $DBI::errstr not $err
